@@ -13,20 +13,26 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Bootloader Assembler & Linker
-        run: sudo apt-get install -y nasm binutils
+      - name: Install NASM and Linker (for BIOS linking)
+        run: sudo apt-get install -y nasm binutils lld
 
-      - name: Build REAL Pybor Compiler
+      - name: Build Pybor Compiler
         run: cargo build --release
 
-      - name: Pybor -> Real Object File (NO NASM!)
+      - name: Compile Pybor for BIOS (x86_32 ELF)
         run: |
-          mkdir -p test_os/x86_32
-          # Odtud vypadne rovnou kernel.o, NASM je mrtev!
-          ./target/release/pybor x86_32 test_os/kernel/kernel.pyb test_os/x86_32/kernel.o
-
-      - name: Link OS
-        run: |
+          mkdir -p test_os/bios
+          ./target/release/pybor bios test_os/kernel/kernel.pyb test_os/bios/kernel.o
           nasm -f elf32 test_os/boot/boot.asm -o test_os/boot/boot.o
-          ld -m elf_i386 -T test_os/scripts/linker.ld -o test_os/my_kernel.bin test_os/boot/boot.o test_os/x86_32/kernel.o
-          echo "✅ Úspěch: Slinkovali jsme binárku z reálných bajtů Pyboru!"
+          ld -m elf_i386 -T test_os/scripts/linker.ld -o test_os/bios/my_kernel.bin test_os/boot/boot.o test_os/bios/kernel.o
+          echo "✅ BIOS Bootable BIN is ready!"
+
+      - name: Compile Pybor for UEFI (x86_64 PE32+)
+        run: |
+          mkdir -p test_os/uefi
+          # Pro UEFI nepotřebujeme NASM bootloader ani LD script!
+          # Pybor vygeneruje rovnou kompatibilní UEFI aplikaci (PE formát).
+          # Použijeme LLD-LINK (Windows linker), který zabalí náš objekt do .EFI
+          ./target/release/pybor uefi test_os/kernel/kernel.pyb test_os/uefi/kernel.obj
+          lld-link -subsystem:efi_application -entry:efi_main -out:test_os/uefi/BOOTX64.EFI test_os/uefi/kernel.obj
+          echo "✅ UEFI BOOTX64.EFI is ready!"
