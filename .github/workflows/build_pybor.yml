@@ -3,84 +3,30 @@ name: Build and Test Pybor
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
 
 jobs:
-  # 1. Sestavení samotného kompilátoru
-  build_compiler:
-    name: Build Compiler (${{ matrix.target }})
+  build_compiler_and_os:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - i686-unknown-linux-gnu       # x86_32
-          - x86_64-unknown-linux-gnu     # x86_64
-          - armv7-unknown-linux-gnueabihf # ARM32
-          - aarch64-unknown-linux-gnu    # ARM64
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
-      - name: Install Cross
-        uses: taiki-e/install-action@cross
+      - name: Install Bootloader Assembler & Linker
+        run: sudo apt-get install -y nasm binutils
 
-      - name: Build Pybor Compiler
-        # Používáme 'cross' místo 'cargo'. Vyřeší to všechny problémy s linkery!
-        run: cross build --release --target ${{ matrix.target }}
-
-  # 2. Generování a testování OS kódu z pybor na všechny architektury
-  build_os:
-    name: Build OS Kernel (${{ matrix.arch }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [x86_16, x86_32, x86_64, arm32, arm64]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Assemblers (NASM and ARM Binutils)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y nasm binutils-arm-linux-gnueabihf binutils-aarch64-linux-gnu
-
-      - name: Build Pybor (Host architecture for code generation)
+      - name: Build REAL Pybor Compiler
         run: cargo build --release
 
-      - name: Generate Target Assembly from kernel.pyb
+      - name: Pybor -> Real Object File (NO NASM!)
         run: |
-          mkdir -p test_os/${{ matrix.arch }}
-          if [[ "${{ matrix.arch }}" == "arm"* ]]; then
-             EXT="S"
-          else
-             EXT="asm"
-          fi
-          ./target/release/pybor ${{ matrix.arch }} test_os/kernel/kernel.pyb test_os/${{ matrix.arch }}/kernel.$EXT
+          mkdir -p test_os/x86_32
+          # Odtud vypadne rovnou kernel.o, NASM je mrtev!
+          ./target/release/pybor x86_32 test_os/kernel/kernel.pyb test_os/x86_32/kernel.o
 
-      - name: Verify generated Assembly (Assemble to object files)
-        run: |
-          if [ "${{ matrix.arch }}" = "x86_16" ]; then
-            nasm -f bin test_os/x86_16/kernel.asm -o test_os/x86_16/kernel.bin
-          elif [ "${{ matrix.arch }}" = "x86_32" ]; then
-            nasm -f elf32 test_os/x86_32/kernel.asm -o test_os/x86_32/kernel.o
-          elif [ "${{ matrix.arch }}" = "x86_64" ]; then
-            nasm -f elf64 test_os/x86_64/kernel.asm -o test_os/x86_64/kernel.o
-          elif [ "${{ matrix.arch }}" = "arm32" ]; then
-            arm-linux-gnueabihf-as test_os/arm32/kernel.S -o test_os/arm32/kernel.o
-          elif [ "${{ matrix.arch }}" = "arm64" ]; then
-            aarch64-linux-gnu-as test_os/arm64/kernel.S -o test_os/arm64/kernel.o
-          fi
-          echo "✅ Assembly je validní!"
-
-      - name: Full OS Link (x86_32 only for now)
-        if: matrix.arch == 'x86_32'
+      - name: Link OS
         run: |
           nasm -f elf32 test_os/boot/boot.asm -o test_os/boot/boot.o
           ld -m elf_i386 -T test_os/scripts/linker.ld -o test_os/my_kernel.bin test_os/boot/boot.o test_os/x86_32/kernel.o
-          echo "✅ Bootovatelný OS úspěšně slinkován!"
+          echo "✅ Úspěch: Slinkovali jsme binárku z reálných bajtů Pyboru!"

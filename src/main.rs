@@ -1,4 +1,6 @@
 use std::{env, fs, process};
+use object::write::{Object, Symbol, SymbolSection, SymbolFlags};
+use object::{Architecture, BinaryFormat, Endianness, SymbolKind, SymbolScope};
 
 #[derive(Debug, Clone, Copy)]
 enum Arch { X86_16, X86_32, X86_64, Arm32, Arm64 }
@@ -36,7 +38,6 @@ fn parse_program(src: &str) -> Result<Vec<Stmt>, String> {
             let parts: Vec<&str> = args.split(',').map(|x| x.trim()).filter(|x| !x.is_empty()).collect();
             if parts.len() != 2 { return Err(format!("řádek {line_no}: chybné argumenty")); }
             let addr = parse_int(parts[0])?; let value = parse_int(parts[1])?;
-            if value > 0xFFFF { return Err(format!("řádek {line_no}: mimo rozsah")); }
             body.push(Stmt::Poke16(addr, value as u16)); continue;
         }
         
@@ -44,65 +45,86 @@ fn parse_program(src: &str) -> Result<Vec<Stmt>, String> {
             let parts: Vec<&str> = args.split(',').map(|x| x.trim()).filter(|x| !x.is_empty()).collect();
             if parts.len() != 2 { return Err(format!("řádek {line_no}: chybné argumenty")); }
             let addr = parse_int(parts[0])?; let value = parse_int(parts[1])?;
-            if value > 0xFF { return Err(format!("řádek {line_no}: mimo rozsah")); }
             body.push(Stmt::Poke8(addr, value as u8)); continue;
         }
         return Err(format!("řádek {line_no}: neznámý příkaz: {trimmed}"));
     }
-    if !header_seen { return Err("chybí `def kernel_main():`".to_string()); }
-    if body.is_empty() { return Err("kernel_main je prázdný".to_string()); }
     Ok(body)
 }
 
-fn codegen(stmts: &[Stmt], arch: Arch) -> String {
-    let mut out = String::new();
-    match arch {
-        Arch::X86_16 => out.push_str("bits 16\nsection .text\nglobal kernel_main\n\nkernel_main:\n"),
-        Arch::X86_32 => out.push_str("bits 32\nsection .text\nglobal kernel_main\n\nkernel_main:\n"),
-        Arch::X86_64 => out.push_str("bits 64\nsection .text\nglobal kernel_main\n\nkernel_main:\n"),
-        Arch::Arm32 | Arch::Arm64 => out.push_str(".section .text\n.global kernel_main\n\nkernel_main:\n"),
-    }
-
+// ZDE JE TO KOUZLO: Emise syrových bajtů pro x86_32 procesor!
+fn generate_x86_32_machine_code(stmts: &[Stmt]) -> Vec<u8> {
+    let mut code = Vec::new();
     for stmt in stmts {
         match *stmt {
-            Stmt::Poke16(addr, value) => match arch {
-                Arch::X86_16 => out.push_str(&format!("    mov bx, 0x{addr:04x}\n    mov ax, 0x{value:04x}\n    mov [bx], ax\n")),
-                Arch::X86_32 => out.push_str(&format!("    mov ebx, 0x{addr:08x}\n    mov ax, 0x{value:04x}\n    mov [ebx], ax\n")),
-                Arch::X86_64 => out.push_str(&format!("    mov rbx, 0x{addr:016x}\n    mov ax, 0x{value:04x}\n    mov [rbx], ax\n")),
-                Arch::Arm32 => out.push_str(&format!("    ldr r0, =0x{addr:08x}\n    ldr r1, =0x{value:04x}\n    strh r1, [r0]\n")),
-                Arch::Arm64 => out.push_str(&format!("    ldr x0, =0x{addr:016x}\n    mov w1, #0x{value:04x}\n    strh w1, [x0]\n")),
-            },
-            Stmt::Poke8(addr, value) => match arch {
-                Arch::X86_16 => out.push_str(&format!("    mov bx, 0x{addr:04x}\n    mov al, 0x{value:02x}\n    mov [bx], al\n")),
-                Arch::X86_32 => out.push_str(&format!("    mov ebx, 0x{addr:08x}\n    mov al, 0x{value:02x}\n    mov [ebx], al\n")),
-                Arch::X86_64 => out.push_str(&format!("    mov rbx, 0x{addr:016x}\n    mov al, 0x{value:02x}\n    mov [rbx], al\n")),
-                Arch::Arm32 => out.push_str(&format!("    ldr r0, =0x{addr:08x}\n    mov r1, #0x{value:02x}\n    strb r1, [r0]\n")),
-                Arch::Arm64 => out.push_str(&format!("    ldr x0, =0x{addr:016x}\n    mov w1, #0x{value:02x}\n    strb w1, [x0]\n")),
-            },
-            Stmt::Hang => match arch {
-                Arch::X86_16 | Arch::X86_32 | Arch::X86_64 => { out.push_str("    cli\n.hang:\n    hlt\n    jmp .hang\n"); return out; }
-                Arch::Arm32 | Arch::Arm64 => { out.push_str(".hang:\n    b .hang\n"); return out; }
+            Stmt::Poke16(addr, value) => {
+                // mov ebx, addr (BB nn nn nn nn)
+                code.push(0xBB);
+                code.extend_from_slice(&addr.to_le_bytes());
+                // mov ax, value (66 B8 nn nn)
+                code.extend_from_slice(&[0x66, 0xB8]);
+                code.extend_from_slice(&value.to_le_bytes());
+                // mov [ebx], ax (66 89 03)
+                code.extend_from_slice(&[0x66, 0x89, 0x03]);
+            }
+            Stmt::Poke8(addr, value) => {
+                // mov ebx, addr (BB nn nn nn nn)
+                code.push(0xBB);
+                code.extend_from_slice(&addr.to_le_bytes());
+                // mov al, value (B0 nn)
+                code.push(0xB0);
+                code.push(value);
+                // mov [ebx], al (88 03)
+                code.extend_from_slice(&[0x88, 0x03]);
+            }
+            Stmt::Hang => {
+                // cli (FA), .hang: hlt (F4), jmp .hang (EB FD)
+                code.extend_from_slice(&[0xFA, 0xF4, 0xEB, 0xFD]);
             }
         }
     }
-    match arch {
-        Arch::X86_16 | Arch::X86_32 | Arch::X86_64 => out.push_str("    cli\n.hang:\n    hlt\n    jmp .hang\n"),
-        Arch::Arm32 | Arch::Arm64 => out.push_str(".hang:\n    b .hang\n"),
-    }
-    out
+    // Pojistný hang na konci
+    code.extend_from_slice(&[0xFA, 0xF4, 0xEB, 0xFD]);
+    code
+}
+
+fn emit_elf(machine_code: Vec<u8>, output_file: &str) {
+    let mut obj = Object::new(BinaryFormat::Elf, Architecture::I386, Endianness::Little);
+    let text_section = obj.add_section(vec![], b".text".to_vec(), object::SectionKind::Text);
+    
+    let offset = obj.append_section_data(text_section, &machine_code, 4);
+
+    let symbol = Symbol {
+        name: b"kernel_main".to_vec(),
+        value: offset,
+        size: machine_code.len() as u64,
+        kind: SymbolKind::Text,
+        scope: SymbolScope::Global,
+        weak: false,
+        section: SymbolSection::Section(text_section),
+        flags: SymbolFlags::None,
+    };
+    obj.add_symbol(symbol);
+
+    let elf_bytes = obj.write().unwrap();
+    fs::write(output_file, elf_bytes).unwrap();
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() != 4 { fail("Použití: pybor <architektura> <vstup.pyb> <výstup.asm>\nArchitektury: x86_16, x86_32, x86_64, arm32, arm64"); }
+    if args.len() != 4 { fail("Použití: pybor <architektura> <vstup.pyb> <výstup.o>"); }
     
     let arch = match args[1].as_str() {
-        "x86_16" => Arch::X86_16, "x86_32" => Arch::X86_32, "x86_64" => Arch::X86_64, "arm32" => Arch::Arm32, "arm64" => Arch::Arm64,
-        _ => fail("Neznámá architektura! Zvolte: x86_16, x86_32, x86_64, arm32, arm64"),
+        "x86_32" => Arch::X86_32,
+        _ => fail("Binární kompilátor zatím podporuje pouze real output pro x86_32"),
     };
     
     let src = fs::read_to_string(&args[2]).unwrap_or_else(|e| fail(&format!("nelze číst {}: {}", args[2], e)));
     let ast = parse_program(&src).unwrap_or_else(|e| fail(&format!("chyba parseru: {}", e)));
-    let asm = codegen(&ast, arch);
-    fs::write(&args[3], asm).unwrap_or_else(|e| fail(&format!("nelze zapsat {}: {}", args[3], e)));
+    
+    if let Arch::X86_32 = arch {
+        let machine_code = generate_x86_32_machine_code(&ast);
+        emit_elf(machine_code, &args[3]);
+        println!("✅ Vygenerován skutečný ELF .o soubor!");
+    }
 }

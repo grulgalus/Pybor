@@ -1,7 +1,10 @@
 [package]
 name = "pybor"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+
+[dependencies]
+object = { version = "0.32", features = ["write"] }
 
 [profile.release]
 lto = true
