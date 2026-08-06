@@ -27,18 +27,12 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross-compilers for Rust
-        run: |
-          sudo apt-get update 
-          sudo apt-get install -y gcc-multilib libc6-dev-i386 gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+      - name: Install Cross
+        uses: taiki-e/install-action@cross
 
       - name: Build Pybor Compiler
-        env:
-          # Rust potřebuje vědět, přes co to má slinkovat pro jiné platformy
-          CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_LINKER: gcc
-          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-        run: cargo build --release --target ${{ matrix.target }}
+        # Používáme 'cross' místo 'cargo'. Vyřeší to všechny problémy s linkery!
+        run: cross build --release --target ${{ matrix.target }}
 
   # 2. Generování a testování OS kódu z pybor na všechny architektury
   build_os:
