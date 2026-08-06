@@ -28,9 +28,16 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install cross-compilers for Rust
-        run: sudo apt-get update && sudo apt-get install -y gcc-multilib gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+        run: |
+          sudo apt-get update 
+          sudo apt-get install -y gcc-multilib libc6-dev-i386 gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
 
       - name: Build Pybor Compiler
+        env:
+          # Rust potřebuje vědět, přes co to má slinkovat pro jiné platformy
+          CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_LINKER: gcc
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: cargo build --release --target ${{ matrix.target }}
 
   # 2. Generování a testování OS kódu z pybor na všechny architektury
@@ -60,14 +67,11 @@ jobs:
           else
              EXT="asm"
           fi
-          
-          # Zde spouštíme ten tvůj nový upravený kompilátor
           ./target/release/pybor ${{ matrix.arch }} test_os/kernel/kernel.pyb test_os/${{ matrix.arch }}/kernel.$EXT
 
       - name: Verify generated Assembly (Assemble to object files)
         run: |
           if [ "${{ matrix.arch }}" = "x86_16" ]; then
-            # x86_16 dočasně přeložíme do raw bin nebo obj pro ověření syntaxe
             nasm -f bin test_os/x86_16/kernel.asm -o test_os/x86_16/kernel.bin
           elif [ "${{ matrix.arch }}" = "x86_32" ]; then
             nasm -f elf32 test_os/x86_32/kernel.asm -o test_os/x86_32/kernel.o
