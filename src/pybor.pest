@@ -1,0 +1,16 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+program = { SOI ~ statement* ~ EOI }
+
+statement = { assignment | expr_statement }
+
+assignment = { ident ~ "=" ~ expr ~ ";" }
+expr_statement = { expr ~ ";" }
+
+expr = { binary_expr | ident | number }
+
+binary_expr = { (ident | number) ~ operator ~ expr }
+operator = { "+" | "-" | "*" | "/" }
+
+ident = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* }
+number = @{ ASCII_DIGIT+ }
