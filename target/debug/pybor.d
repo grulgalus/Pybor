@@ -1,1 +1,0 @@
-/data/data/com.termux/files/home/pybor/target/debug/pybor: /data/data/com.termux/files/home/pybor/src/ast.rs /data/data/com.termux/files/home/pybor/src/checker.rs /data/data/com.termux/files/home/pybor/src/main.rs
