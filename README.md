@@ -63,4 +63,4 @@ def kernel_main():
  - Loops (while, for) and conditionals (if)[N]
  - Rust-like Borrow/Ownership checker for pointer and memory management[N]
  - Drop the NASM intermediate step and generate direct ELF binary output[N]
-Created as an experimental low-level language for OS development.
+Created as an experimental low-level language for OS development. 
