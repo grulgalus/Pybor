@@ -1,0 +1,44 @@
+name: Release Pybor 1.0.0-ALPHA
+
+on:
+  push:
+    tags:
+      - 'v*' # Spustí se jen když vytvoříš tag (např. v1.0.0-alpha)
+
+jobs:
+  build_release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Pybor for Release
+        run: cargo build --release
+
+      - name: Rename and zip binary
+        run: |
+          mv target/release/pybor pybor-linux-amd64
+          zip pybor-1.0.0-alpha.zip pybor-linux-amd64
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: pybor-1.0.0-alpha.zip
+          name: Pybor 1.0.0 (ALPHA)
+          body: |
+            # Pybor 1.0.0-ALPHA 🚀
+            První veřejná alpha verze revolučního Pybor kompilátoru!
+            
+            ### Co Pybor umí:
+            * **Generování kódu bez NASMu!** Vše jede čistě přes Pybor.
+            * **Multi-Arch:** Podpora pro `x86_16` (BIOS Bootloader), `x86_32`, `x86_64` (UEFI), `arm32` a `arm64`.
+            * Generuje čisté `Raw Binary`, `ELF` a `COFF` formáty.
+            * Můžete napsat bootloader i jádro OS v jednom jazyce.
+
+            Stáhněte si `.zip`, rozbalte a můžete hned kompilovat své OS projekty!
+          draft: false
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
