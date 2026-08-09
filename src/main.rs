@@ -4,11 +4,11 @@ use object::{Architecture, BinaryFormat, Endianness, SymbolFlags, SymbolKind, Sy
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Target {
-    X86_16, // Pro BIOS Bootloader (Raw Binary)
-    X86_32, // Pro staré Kernely (ELF)
-    X86_64, // Pro nové Kernely a UEFI (PE/COFF)
-    Arm32,  // Budoucnost
-    Arm64,  // Budoucnost
+    X86_16,
+    X86_32,
+    X86_64,
+    Arm32,
+    Arm64,
 }
 
 #[derive(Debug)]
@@ -58,24 +58,20 @@ fn gen_x86_16(stmts: &[Stmt]) -> Vec<u8> {
     for stmt in stmts {
         match *stmt {
             Stmt::Poke16(addr, value) => {
-                // mov bx, addr (BB nn nn)
                 code.push(0xBB); code.extend_from_slice(&(addr as u16).to_le_bytes());
-                // mov ax, value (B8 nn nn)
                 code.push(0xB8); code.extend_from_slice(&value.to_le_bytes());
-                // mov [bx], ax (89 07)
                 code.extend_from_slice(&[0x89, 0x07]);
             }
             Stmt::Poke8(addr, value) => {
                 code.push(0xBB); code.extend_from_slice(&(addr as u16).to_le_bytes());
-                code.push(0xB0); code.push(*value);
-                code.extend_from_slice(&[0x88, 0x07]); // mov [bx], al
+                code.push(0xB0); code.push(value); // OPRAVA: Odstraněna hvězdička
+                code.extend_from_slice(&[0x88, 0x07]);
             }
             Stmt::Hang => code.extend_from_slice(&[0xFA, 0xF4, 0xEB, 0xFD]),
         }
     }
     code.extend_from_slice(&[0xFA, 0xF4, 0xEB, 0xFD]);
     
-    // Mágie Bootloaderu: Doplníme nulama na 510 bytů a přidáme AA 55 boot signaturu
     let mut boot_sector = vec![0; 512];
     let copy_len = std::cmp::min(code.len(), 510);
     boot_sector[..copy_len].copy_from_slice(&code[..copy_len]);
@@ -97,7 +93,7 @@ fn gen_x86_32(stmts: &[Stmt]) -> Vec<u8> {
             }
             Stmt::Poke8(addr, value) => {
                 code.push(0xBB); code.extend_from_slice(&addr.to_le_bytes());
-                code.push(0xB0); code.push(*value);
+                code.push(0xB0); code.push(value); // OPRAVA: Odstraněna hvězdička
                 code.extend_from_slice(&[0x88, 0x03]);
             }
             Stmt::Hang => code.extend_from_slice(&[0xFA, 0xF4, 0xEB, 0xFD]),
@@ -114,15 +110,17 @@ fn gen_x86_64(stmts: &[Stmt]) -> Vec<u8> {
         match *stmt {
             Stmt::Poke16(addr, value) => {
                 code.extend_from_slice(&[0x48, 0xB8]);
-                code.extend_from_slice(&(*addr as u64).to_le_bytes());
+                let addr64 = addr as u64; // OPRAVA: uloženo bez hvězdičky do proměnné
+                code.extend_from_slice(&addr64.to_le_bytes());
                 code.extend_from_slice(&[0x66, 0xB9]); 
                 code.extend_from_slice(&value.to_le_bytes());
                 code.extend_from_slice(&[0x66, 0x89, 0x08]);
             }
             Stmt::Poke8(addr, value) => {
                 code.extend_from_slice(&[0x48, 0xB8]);
-                code.extend_from_slice(&(*addr as u64).to_le_bytes());
-                code.push(0xB1); code.push(*value);
+                let addr64 = addr as u64; // OPRAVA: uloženo bez hvězdičky do proměnné
+                code.extend_from_slice(&addr64.to_le_bytes());
+                code.push(0xB1); code.push(value); // OPRAVA: Odstraněna hvězdička
                 code.extend_from_slice(&[0x88, 0x08]);
             }
             Stmt::Hang => code.extend_from_slice(&[0xFA, 0xF4, 0xEB, 0xFD]),
@@ -132,14 +130,13 @@ fn gen_x86_64(stmts: &[Stmt]) -> Vec<u8> {
     code
 }
 
-// 4. Místa pro ARM (Zatím jen vrací Hang jako placeholder)
-fn gen_arm(stmts: &[Stmt]) -> Vec<u8> {
+// 4. Místa pro ARM (OPRAVA: podtržítko, aby Rust neřval unused variable)
+fn gen_arm(_stmts: &[Stmt]) -> Vec<u8> {
     vec![0xFE, 0xE7] // b . (infinite loop na ARMu)
 }
 
 fn emit_file(machine_code: Vec<u8>, target: Target, output_file: &str) {
     if target == Target::X86_16 {
-        // Bootloader musí být čistý `.bin` soubor (žádné hlavičky, jen opcody!)
         fs::write(output_file, machine_code).unwrap();
         return;
     }
