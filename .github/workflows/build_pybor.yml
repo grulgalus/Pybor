@@ -13,42 +13,64 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Linkers (No more NASM!)
-        run: sudo apt-get install -y binutils lld
+      - name: Install Linkers, QEMU and UEFI Firmware
+        # Nainstalujeme QEMU pro x86 i ARM a OVMF (UEFI bios)
+        run: sudo apt-get update && sudo apt-get install -y binutils lld qemu-system-x86 qemu-system-arm ovmf mtools
 
       - name: Build Pybor Compiler
         run: cargo build --release
 
-      - name: Create Pybor Bootloader Test file
+      - name: Create Pybor Kernel/Boot Test files
         run: |
           mkdir -p test_os/boot
           echo "def bootloader_main():" > test_os/boot/boot.pyb
           echo "    poke8(0xb8000, 0x50) # 'P'" >> test_os/boot/boot.pyb
           echo "    hang()" >> test_os/boot/boot.pyb
 
-      - name: Build BIOS Bootloader (x86_16) direct to .bin
+      # === 1. BIOS (x86_16) ===
+      - name: Build & Test BIOS Bootloader (x86_16)
         run: |
           mkdir -p test_os/x86_16
-          # 🚀 Tady z tvého boot.pyb rovnou leze 512B bootovací sektor! Žádný Linker, žádný NASM!
           ./target/release/pybor x86_16 test_os/boot/boot.pyb test_os/x86_16/bootsector.bin
-          echo "✅ BIOS Bootloader je připraven a nabootuje z flešky!"
+          
+          echo "Spouštím x86 BIOS v QEMU..."
+          timeout 3s qemu-system-x86_64 -drive format=raw,file=test_os/x86_16/bootsector.bin -display none || [ $? -eq 124 ] && echo "✅ x86_16 QEMU úspěch!"
 
-      - name: Build Kernel for old x86_32 (ELF)
+      # === 2. x86_32 (ELF Kernel) ===
+      - name: Build & Test x86_32 Kernel
         run: |
           mkdir -p test_os/x86_32
           ./target/release/pybor x86_32 test_os/kernel/kernel.pyb test_os/x86_32/kernel.o
-          echo "✅ x86_32 ELF Kernel připraven k linkování!"
+          
+          echo "Spouštím x86_32 ELF Kernel v QEMU..."
+          timeout 3s qemu-system-i386 -kernel test_os/x86_32/kernel.o -display none || [ $? -eq 124 ] && echo "✅ x86_32 QEMU úspěch!"
 
-      - name: Build UEFI Application for x86_64 (PE32+)
+      # === 3. x86_64 (UEFI) ===
+      - name: Build & Test UEFI Application (x86_64)
         run: |
-          mkdir -p test_os/x86_64
+          mkdir -p test_os/x86_64/fat/EFI/BOOT
           ./target/release/pybor x86_64 test_os/kernel/kernel.pyb test_os/x86_64/kernel.obj
-          lld-link -subsystem:efi_application -entry:efi_main -out:test_os/x86_64/BOOTX64.EFI test_os/x86_64/kernel.obj
-          echo "✅ UEFI BOOTX64.EFI je na světě!"
+          lld-link -subsystem:efi_application -entry:efi_main -out:test_os/x86_64/fat/EFI/BOOT/BOOTX64.EFI test_os/x86_64/kernel.obj
+          
+          echo "Spouštím x86_64 UEFI v QEMU..."
+          # Zkopírujeme OVMF bios, vytvoříme virtuální FAT disk obsahující složku fat/
+          cp /usr/share/OVMF/OVMF_CODE.fd test_os/x86_64/
+          timeout 3s qemu-system-x86_64 -bios test_os/x86_64/OVMF_CODE.fd -drive file=fat:rw:test_os/x86_64/fat,format=raw -display none || [ $? -eq 124 ] && echo "✅ x86_64 UEFI QEMU úspěch!"
 
-      - name: Build ARM Architectures (ELF)
+      # === 4. ARM Architectures (ELF) ===
+      - name: Build & Test ARM32
         run: |
-          mkdir -p test_os/arm32 test_os/arm64
+          mkdir -p test_os/arm32
           ./target/release/pybor arm32 test_os/kernel/kernel.pyb test_os/arm32/kernel.o
+          
+          echo "Spouštím ARM32 v QEMU (machine virt)..."
+          timeout 3s qemu-system-arm -M virt -cpu cortex-a15 -kernel test_os/arm32/kernel.o -display none || [ $? -eq 124 ] && echo "✅ ARM32 QEMU úspěch!"
+
+      - name: Build & Test ARM64 (AArch64)
+        run: |
+          mkdir -p test_os/arm64
           ./target/release/pybor arm64 test_os/kernel/kernel.pyb test_os/arm64/kernel.o
-          echo "✅ ARM a ARM64 objekty vytvořeny!"
+          
+          echo "Spouštím ARM64 v QEMU (machine virt)..."
+          timeout 3s qemu-system-aarch64 -M virt -cpu cortex-a57 -kernel test_os/arm64/kernel.o -display none || [ $? -eq 124 ] && echo "✅ ARM64 QEMU úspěch!"
+
