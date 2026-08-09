@@ -26,7 +26,7 @@ jobs:
           echo "    poke8(0xb8000, 0x50) # 'P'" >> test_os/boot/boot.pyb
           echo "    hang()" >> test_os/boot/boot.pyb
 
-      # === 1. BIOS (x86_16) - Plně Bootovatelné ===
+      # === 1. BIOS (x86_16) ===
       - name: Build & Test BIOS Bootloader (x86_16)
         run: |
           mkdir -p test_os/x86_16
@@ -35,7 +35,7 @@ jobs:
           echo "Spouštím x86 BIOS v QEMU..."
           timeout 3s qemu-system-x86_64 -drive format=raw,file=test_os/x86_16/bootsector.bin -display none || [ $? -eq 124 ] && echo "✅ x86_16 QEMU úspěch!"
 
-      # === 2. x86_32 (ELF Kernel) - Ověření ELFu ===
+      # === 2. x86_32 (ELF Kernel) ===
       - name: Build & Verify x86_32 Kernel
         run: |
           mkdir -p test_os/x86_32
@@ -46,7 +46,7 @@ jobs:
           readelf -h test_os/x86_32/kernel.o | grep "Machine:" | grep "80386"
           echo "✅ x86_32 kompilátor vytváří perfektní ELF!"
 
-      # === 3. x86_64 (UEFI) - Plně Bootovatelné ===
+      # === 3. x86_64 (UEFI) ===
       - name: Build & Test UEFI Application (x86_64)
         run: |
           mkdir -p test_os/x86_64/fat/EFI/BOOT
@@ -54,10 +54,11 @@ jobs:
           lld-link -subsystem:efi_application -entry:efi_main -out:test_os/x86_64/fat/EFI/BOOT/BOOTX64.EFI test_os/x86_64/kernel.obj
           
           echo "Spouštím x86_64 UEFI v QEMU..."
-          cp /usr/share/OVMF/OVMF_CODE.fd test_os/x86_64/
-          timeout 3s qemu-system-x86_64 -bios test_os/x86_64/OVMF_CODE.fd -drive file=fat:rw:test_os/x86_64/fat,format=raw -display none || [ $? -eq 124 ] && echo "✅ x86_64 UEFI QEMU úspěch!"
+          # OPRAVA: v Ubuntu je soubor obvykle jen OVMF.fd
+          cp /usr/share/OVMF/OVMF.fd test_os/x86_64/ || cp /usr/share/qemu/OVMF.fd test_os/x86_64/
+          timeout 3s qemu-system-x86_64 -bios test_os/x86_64/OVMF.fd -drive file=fat:rw:test_os/x86_64/fat,format=raw -display none || [ $? -eq 124 ] && echo "✅ x86_64 UEFI QEMU úspěch!"
 
-      # === 4. ARM Architectures (ELF) - Ověření ELFu ===
+      # === 4. ARM Architectures (ELF) ===
       - name: Build & Verify ARM32
         run: |
           mkdir -p test_os/arm32
