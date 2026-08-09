@@ -47,7 +47,6 @@ fn parse_program(src: &str) -> Result<Vec<Stmt>, String> {
     Ok(body)
 }
 
-// 1. BIOS BACKEND: 32-bitový kód
 fn gen_x86_32(stmts: &[Stmt]) -> Vec<u8> {
     let mut code = Vec::new();
     for stmt in stmts {
@@ -59,7 +58,7 @@ fn gen_x86_32(stmts: &[Stmt]) -> Vec<u8> {
             }
             Stmt::Poke8(addr, value) => {
                 code.push(0xBB); code.extend_from_slice(&addr.to_le_bytes());
-                code.push(0xB0); code.push(value); // ZDE BYLA OPRAVA: Odstraněna hvězdička
+                code.push(0xB0); code.push(value);
                 code.extend_from_slice(&[0x88, 0x03]);
             }
             Stmt::Hang => code.extend_from_slice(&[0xFA, 0xF4, 0xEB, 0xFD]),
@@ -69,14 +68,13 @@ fn gen_x86_32(stmts: &[Stmt]) -> Vec<u8> {
     code
 }
 
-// 2. UEFI BACKEND: 64-bitový kód
 fn gen_x86_64(stmts: &[Stmt]) -> Vec<u8> {
     let mut code = Vec::new();
     for stmt in stmts {
         match *stmt {
             Stmt::Poke16(addr, value) => {
                 code.extend_from_slice(&[0x48, 0xB8]);
-                let addr64 = addr as u64; // ZDE BYLA OPRAVA: Odstraněna hvězdička
+                let addr64 = addr as u64;
                 code.extend_from_slice(&addr64.to_le_bytes());
                 code.extend_from_slice(&[0x66, 0xB9]); 
                 code.extend_from_slice(&value.to_le_bytes());
@@ -84,23 +82,23 @@ fn gen_x86_64(stmts: &[Stmt]) -> Vec<u8> {
             }
             Stmt::Poke8(addr, value) => {
                 code.extend_from_slice(&[0x48, 0xB8]);
-                let addr64 = addr as u64; // ZDE BYLA OPRAVA: Odstraněna hvězdička
+                let addr64 = addr as u64;
                 code.extend_from_slice(&addr64.to_le_bytes());
-                code.push(0xB1); code.push(value); // ZDE BYLA OPRAVA: Odstraněna hvězdička
+                code.push(0xB1); code.push(value);
                 code.extend_from_slice(&[0x88, 0x08]);
             }
             Stmt::Hang => code.extend_from_slice(&[0xFA, 0xF4, 0xEB, 0xFD]),
         }
     }
-    // Návrat z UEFI aplikace
     code.extend_from_slice(&[0xB8, 0x00, 0x00, 0x00, 0x00, 0xC3]);
     code
 }
 
 fn emit_file(machine_code: Vec<u8>, target: Target, output_file: &str) {
+    // TADY JE OPRAVA: Pro UEFI generujeme BinaryFormat::Coff, linker z toho udelá PE/EFI
     let (format, arch) = match target {
         Target::Bios32 => (BinaryFormat::Elf, Architecture::I386),
-        Target::Uefi64 => (BinaryFormat::Pe, Architecture::X86_64),
+        Target::Uefi64 => (BinaryFormat::Coff, Architecture::X86_64),
     };
     
     let mut obj = Object::new(format, arch, Endianness::Little);
