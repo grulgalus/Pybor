@@ -11,3 +11,5 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+fatfs = "0.3"
+fscommon = "0.1"
