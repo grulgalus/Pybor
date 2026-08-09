@@ -13,3 +13,6 @@ panic = "abort"
 strip = true
 fatfs = "0.3"
 fscommon = "0.1"
+eframe = "0.24"
+rfd = "0.12"
+iso9660 = "0.1" # (Teoretická podpora pro čtení/zápis dat na CD)
