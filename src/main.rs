@@ -59,7 +59,7 @@ fn gen_x86_32(stmts: &[Stmt]) -> Vec<u8> {
             }
             Stmt::Poke8(addr, value) => {
                 code.push(0xBB); code.extend_from_slice(&addr.to_le_bytes());
-                code.push(0xB0); code.push(*value);
+                code.push(0xB0); code.push(value); // ZDE BYLA OPRAVA: Odstraněna hvězdička
                 code.extend_from_slice(&[0x88, 0x03]);
             }
             Stmt::Hang => code.extend_from_slice(&[0xFA, 0xF4, 0xEB, 0xFD]),
@@ -76,7 +76,7 @@ fn gen_x86_64(stmts: &[Stmt]) -> Vec<u8> {
         match *stmt {
             Stmt::Poke16(addr, value) => {
                 code.extend_from_slice(&[0x48, 0xB8]);
-                let addr64 = *addr as u64;
+                let addr64 = addr as u64; // ZDE BYLA OPRAVA: Odstraněna hvězdička
                 code.extend_from_slice(&addr64.to_le_bytes());
                 code.extend_from_slice(&[0x66, 0xB9]); 
                 code.extend_from_slice(&value.to_le_bytes());
@@ -84,9 +84,9 @@ fn gen_x86_64(stmts: &[Stmt]) -> Vec<u8> {
             }
             Stmt::Poke8(addr, value) => {
                 code.extend_from_slice(&[0x48, 0xB8]);
-                let addr64 = *addr as u64;
+                let addr64 = addr as u64; // ZDE BYLA OPRAVA: Odstraněna hvězdička
                 code.extend_from_slice(&addr64.to_le_bytes());
-                code.push(0xB1); code.push(*value);
+                code.push(0xB1); code.push(value); // ZDE BYLA OPRAVA: Odstraněna hvězdička
                 code.extend_from_slice(&[0x88, 0x08]);
             }
             Stmt::Hang => code.extend_from_slice(&[0xFA, 0xF4, 0xEB, 0xFD]),
@@ -107,7 +107,6 @@ fn emit_file(machine_code: Vec<u8>, target: Target, output_file: &str) {
     let text = obj.add_section(vec![], b".text".to_vec(), object::SectionKind::Text);
     let offset = obj.append_section_data(text, &machine_code, 16);
 
-    // Oprava pole 1 (použití .as_slice() pro sjednocení typu polí různé délky)
     let name: &[u8] = match target { 
         Target::Bios32 => b"kernel_main".as_slice(), 
         Target::Uefi64 => b"efi_main".as_slice() 
@@ -118,10 +117,10 @@ fn emit_file(machine_code: Vec<u8>, target: Target, output_file: &str) {
         value: offset, 
         size: machine_code.len() as u64,
         kind: SymbolKind::Text, 
-        scope: SymbolScope::Dynamic, // Oprava 2: místo Global použijeme Dynamic
+        scope: SymbolScope::Dynamic,
         weak: false,
         section: SymbolSection::Section(text), 
-        flags: SymbolFlags::None,   // Oprava 3: enum fixnut na konstantu
+        flags: SymbolFlags::None,
     });
 
     let bytes = obj.write().unwrap();
