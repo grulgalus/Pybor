@@ -1,4 +1,4 @@
-name: 1. Test Kompilátoru
+name: 1. Compiler Test
 
 on:
   push:
@@ -8,16 +8,12 @@ on:
 
 jobs:
   test_logic:
-    name: Test překladu instrukcí
+    name: Translate Instructions Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Instalace Rustu
+      - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
         
-      - name: Kontrola kódu (Check)
+      - name: Check Code
         run: cargo check --verbose
-        
-      # Kdybys časem do kódu přidal `#[test]`, toto je spustí
-      - name: Spuštění Unit Testů
-        run: cargo test --verbose

@@ -6,50 +6,56 @@ use object::{Architecture, BinaryFormat, Endianness, SymbolFlags, SymbolKind, Sy
 use fatfs::{FileSystem, FormatVolumeOptions};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum Target { 
-    X86_16, X86_32, X86_64, 
-    Arm32, Arm64, 
-    Riscv32, Riscv64, 
-    Mips, Mips64, 
-    PowerPc, PowerPc64, 
-    Sparc64, 
-    Wasm32 
-}
+enum Target { X86_16, X86_32, X86_64, Arm32, Arm64, Riscv32, Riscv64, Mips, Mips64, PowerPc, PowerPc64, Sparc64, Wasm32 }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Language { English, Czech }
 
 #[derive(Debug)]
-enum Stmt { 
-    Print(String), 
-    Hang 
-}
+enum Stmt { Print(String), Hang }
 
-// ==========================================
-// GRAFICKÉ ROZHRANÍ (Pybor Studio)
-// ==========================================
 struct PyborApp {
     input_code: String,
     output_path: String,
     selected_target: Target,
     console_log: String,
+    language: Language,
 }
 
 impl Default for PyborApp {
     fn default() -> Self {
         Self {
-            input_code: "def main():\n    print(\"Pybor kompiluje...\")\n    hang()".to_owned(),
+            input_code: "def main():\n    print(\"Pybor is compiling...\")\n    hang()".to_owned(),
             output_path: "".to_owned(),
             selected_target: Target::X86_16,
-            console_log: "Vítejte v Pybor Studiu!\nVyberte procesorovou architekturu a jedem.".to_owned(),
+            console_log: "Welcome to Pybor Studio! / Vítejte v Pybor Studiu!".to_owned(),
+            language: Language::English,
         }
+    }
+}
+
+// Funkce na okamžitý překlad textů v UI
+fn t(lang: Language, en: &str, cz: &str) -> String {
+    match lang {
+        Language::English => en.to_string(),
+        Language::Czech => cz.to_string(),
     }
 }
 
 impl eframe::App for PyborApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Pybor Studio"); // Slovo OS zmizelo!
+            ui.horizontal(|ui| {
+                ui.heading("Pybor Studio");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.selectable_value(&mut self.language, Language::Czech, "🇨🇿 CS");
+                    ui.selectable_value(&mut self.language, Language::English, "🇬🇧 EN");
+                });
+            });
+            ui.separator();
             
             ui.horizontal(|ui| {
-                ui.label("Architektura:");
+                ui.label(t(self.language, "Architecture:", "Architektura:"));
                 egui::ComboBox::from_id_source("arch_combo")
                     .selected_text(format!("{:?}", self.selected_target))
                     .show_ui(ui, |ui| {
@@ -66,7 +72,7 @@ impl eframe::App for PyborApp {
                         ui.selectable_value(&mut self.selected_target, Target::Riscv32, "RISC-V (32-bit ELF)");
                         ui.selectable_value(&mut self.selected_target, Target::Riscv64, "RISC-V (64-bit ELF)");
                         ui.separator();
-                        ui.label("--- Exotika ---");
+                        ui.label("--- Exotic / Ostatní ---");
                         ui.selectable_value(&mut self.selected_target, Target::Mips, "MIPS (32-bit ELF)");
                         ui.selectable_value(&mut self.selected_target, Target::Mips64, "MIPS (64-bit ELF)");
                         ui.selectable_value(&mut self.selected_target, Target::PowerPc, "PowerPC (32-bit ELF)");
@@ -79,14 +85,14 @@ impl eframe::App for PyborApp {
             });
             ui.separator();
             
-            ui.label("Zdrojový kód:");
+            ui.label(t(self.language, "Source code:", "Zdrojový kód:"));
             egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
                 ui.add(egui::TextEdit::multiline(&mut self.input_code).font(egui::TextStyle::Monospace).desired_width(f32::INFINITY));
             });
             ui.separator();
             
             ui.horizontal(|ui| {
-                if ui.button("💾 Uložit jako...").clicked() {
+                if ui.button(t(self.language, "💾 Save as...", "💾 Uložit jako...")).clicked() {
                     if let Some(path) = FileDialog::new().save_file() {
                         self.output_path = path.display().to_string();
                     }
@@ -95,19 +101,19 @@ impl eframe::App for PyborApp {
             });
             ui.add_space(10.0);
             
-            if ui.add_sized([ui.available_width(), 40.0], egui::Button::new("🚀 ZKOMPILOVAT")).clicked() {
-                self.console_log.push_str("\n\nZačínám kompilaci...");
+            if ui.add_sized([ui.available_width(), 40.0], egui::Button::new(t(self.language, "🚀 COMPILE", "🚀 ZKOMPILOVAT"))).clicked() {
+                self.console_log.push_str(&t(self.language, "\n\nStarting compilation...", "\n\nZačínám kompilaci..."));
                 if self.output_path.is_empty() {
-                    self.console_log.push_str("\n❌ CHYBA: Vyberte místo uložení!");
+                    self.console_log.push_str(&t(self.language, "\n❌ ERROR: Select save location first!", "\n❌ CHYBA: Vyberte nejdřív místo uložení!"));
                 } else {
                     match compile_from_string(&self.input_code, self.selected_target, &self.output_path) {
-                        Ok(_) => self.console_log.push_str(&format!("\n✅ ÚSPĚCH! Vygenerováno pro {:?} do {}", self.selected_target, self.output_path)),
-                        Err(e) => self.console_log.push_str(&format!("\n❌ CHYBA KOMPILACE: {}", e)),
+                        Ok(_) => self.console_log.push_str(&format!("\n✅ {} {:?} -> {}", t(self.language, "SUCCESS! Generated for", "ÚSPĚCH! Vygenerováno pro"), self.selected_target, self.output_path)),
+                        Err(e) => self.console_log.push_str(&format!("\n❌ {}: {}", t(self.language, "COMPILATION ERROR", "CHYBA KOMPILACE"), e)),
                     }
                 }
             }
             ui.separator();
-            ui.label("Výstup kompilátoru:");
+            ui.label(t(self.language, "Compiler output:", "Výstup kompilátoru:"));
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.add(egui::TextEdit::multiline(&mut self.console_log).interactive(false).desired_width(f32::INFINITY));
             });
@@ -123,19 +129,17 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native("Pybor Studio", options, Box::new(|_cc| Box::new(PyborApp::default())))
 }
 
-// ==========================================
-// PYBOR KOMPILÁTOR - JÁDRO
-// ==========================================
+// ---------------------------------------------------------
+// PYBOR JÁDRO (CORE)
+// ---------------------------------------------------------
 fn parse_program_string(src: &str) -> Result<Vec<Stmt>, String> {
     let mut body = Vec::new();
     let mut header_seen = false;
     for raw_line in src.lines() {
         let trimmed = raw_line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
-        
         if trimmed == "def main():" || trimmed == "def kernel_main():" || trimmed == "def bootloader_main():" { header_seen = true; continue; }
         if !header_seen { continue; }
-        
         if trimmed == "hang()" { body.push(Stmt::Hang); continue; }
         if let Some(text) = trimmed.strip_prefix("print(\"").and_then(|s| s.strip_suffix("\")")) {
             body.push(Stmt::Print(text.to_string())); continue;
@@ -191,7 +195,6 @@ fn gen_x86_64(stmts: &[Stmt]) -> Vec<u8> {
     code
 }
 
-// Zástupný generátor pro všechny nové architektury (zatím generuje prázdný kód do ELFu)
 fn gen_dummy(_stmts: &[Stmt]) -> Vec<u8> { vec![0x00, 0x00, 0x00, 0x00] } 
 
 fn create_bootable_img(efi_binary: &[u8], output_file: &str) -> Result<(), String> {
@@ -209,11 +212,7 @@ fn create_bootable_img(efi_binary: &[u8], output_file: &str) -> Result<(), Strin
 
 fn compile_from_string(src: &str, target: Target, out: &str) -> Result<(), String> {
     let ast = parse_program_string(src)?;
-    
-    // 16-bit Raw
     if target == Target::X86_16 { fs::write(out, gen_x86_16(&ast)).map_err(|e| e.to_string())?; return Ok(()); }
-
-    // 64-bit UEFI Image
     if target == Target::X86_64 && out.ends_with(".img") {
         let mcode = gen_x86_64(&ast);
         let mut obj = Object::new(BinaryFormat::Pe, Architecture::X86_64, Endianness::Little);
@@ -225,7 +224,6 @@ fn compile_from_string(src: &str, target: Target, out: &str) -> Result<(), Strin
         return Ok(());
     }
     
-    // Obrovský přepínač pro všechny ELF/WASM architektury světa!
     let (format, arch, endian) = match target {
         Target::X86_32 => (BinaryFormat::Elf, Architecture::I386, Endianness::Little),
         Target::X86_64 => (BinaryFormat::Elf, Architecture::X86_64, Endianness::Little),
@@ -239,15 +237,14 @@ fn compile_from_string(src: &str, target: Target, out: &str) -> Result<(), Strin
         Target::PowerPc64 => (BinaryFormat::Elf, Architecture::PowerPc64, Endianness::Big),
         Target::Sparc64 => (BinaryFormat::Elf, Architecture::Sparc64, Endianness::Big),
         Target::Wasm32 => (BinaryFormat::Wasm, Architecture::Wasm32, Endianness::Little),
-        _ => return Err("Neznámý cíl!".to_string()),
+        _ => return Err("Unknown target!".to_string()),
     };
 
-    let mcode = gen_dummy(&ast); // Zatím dáváme dummy instrukce pro novinky
+    let mcode = gen_dummy(&ast);
     let mut obj = Object::new(format, arch, endian);
     let text = obj.add_section(vec![], b".text".to_vec(), object::SectionKind::Text);
     let offset = obj.append_section_data(text, &mcode, 16);
     obj.add_symbol(Symbol { name: b"main".to_vec(), value: offset, size: mcode.len() as u64, kind: SymbolKind::Text, scope: SymbolScope::Dynamic, weak: false, section: SymbolSection::Section(text), flags: SymbolFlags::None });
-    
     fs::write(out, obj.write().unwrap()).map_err(|e| e.to_string())?;
     Ok(())
 }

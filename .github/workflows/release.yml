@@ -1,16 +1,16 @@
-name: 3. Vydání (Release)
+name: 3. Release
 
 on:
   push:
     tags:
-      - 'v*' # Spustí se jen při vydání, např. git tag v1.0.0
+      - 'v*'
 
 permissions:
   contents: write
 
 jobs:
   publish-assets:
-    name: Zabalení a Publikace
+    name: Package and Publish
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -27,23 +27,23 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Instalace Rustu
+      - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
         
-      - name: Instalace GUI závislostí (Pouze Linux)
+      - name: Install GUI dependencies (Linux only)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libasound2-dev
 
-      - name: Build pro Vydání
+      - name: Build for Release
         run: cargo build --release
 
-      - name: Přejmenování souborů k vydání
+      - name: Rename files for release
         shell: bash
         run: |
           cp target/release/${{ matrix.artifact }} ${{ matrix.asset_name }}
           zip ${{ matrix.asset_name }}.zip ${{ matrix.asset_name }}
 
-      - name: Nahrát na GitHub Releases
+      - name: Upload to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
           files: "*.zip"
