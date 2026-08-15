@@ -1,84 +1,51 @@
-name: Release Pybor 1.0.0-ALPHA
+name: 3. Vydání (Release)
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*' # Spustí se jen při vydání, např. git tag v1.0.0
 
-# 🚀 TÍMTO OPRAVÍME ERROR 403! Dáme botovi práva vytvářet Releases.
 permissions:
   contents: write
 
 jobs:
-  build_release:
-    name: Build for ${{ matrix.os }}
+  publish-assets:
+    name: Zabalení a Publikace
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
-            artifact: pybor
-            asset_name: pybor-linux-amd64
           - os: windows-latest
             artifact: pybor.exe
-            asset_name: pybor-windows
+            asset_name: Pybor-Studio-Windows.exe
+          - os: ubuntu-latest
+            artifact: pybor
+            asset_name: Pybor-Studio-Linux
           - os: macos-latest
             artifact: pybor
-            asset_name: pybor-macos-amd64
+            asset_name: Pybor-Studio-MacOS
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust
+      - name: Instalace Rustu
         uses: dtolnay/rust-toolchain@stable
-
-      # Přidáme metadata do Cargo.toml (potřebné pro Linuxový .deb balíček)
-      - name: Fix Cargo.toml for .deb building
+        
+      - name: Instalace GUI závislostí (Pouze Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: |
-          echo 'description = "Pybor OS Compiler"' >> Cargo.toml
-          echo 'license = "MIT"' >> Cargo.toml
+        run: sudo apt-get update && sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libasound2-dev
 
-      - name: Build Pybor
+      - name: Build pro Vydání
         run: cargo build --release
 
-      # 🐧 Vytvoření .deb instalačky pro Linux
-      - name: Build .deb package (Linux only)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          cargo install cargo-deb
-          cargo deb
-          cp target/debian/*.deb ./pybor-linux.deb
-
-      # 🪟 Zabalení Windows .exe pomocí PowerShellu
-      - name: Pack Windows (PowerShell)
-        if: matrix.os == 'windows-latest'
-        run: |
-          copy target\release\${{ matrix.artifact }} ${{ matrix.asset_name }}.exe
-          Compress-Archive -Path ${{ matrix.asset_name }}.exe -DestinationPath ${{ matrix.asset_name }}.zip
-
-      # 🍎 Zabalení Macu a normálního Linuxu
-      - name: Pack Linux/Mac (Bash)
-        if: matrix.os != 'windows-latest'
+      - name: Přejmenování souborů k vydání
+        shell: bash
         run: |
           cp target/release/${{ matrix.artifact }} ${{ matrix.asset_name }}
           zip ${{ matrix.asset_name }}.zip ${{ matrix.asset_name }}
 
-      # 🚀 Nahrání vydání (verze v2 vyřeší ty Node.js warningy)
-      - name: Upload Release
+      - name: Nahrát na GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            *.zip
-            *.deb
-          name: Pybor 1.0.0 (ALPHA)
-          body: |
-            # Pybor 1.0.0-ALPHA 🚀
-            První veřejná alpha verze revolučního Pybor kompilátoru! Nyní plně nezávislý na NASMu a s podporou UEFI i BIOSu.
-            
-            ### Instalační soubory:
-            * **Windows:** Stáhněte si `pybor-windows.zip` a spusťte `.exe` z terminálu/příkazové řádky!
-            * **Linux (Debian/Ubuntu):** Stáhněte a nainstalujte `pybor-linux.deb` (např. přes `sudo apt install ./pybor-linux.deb`). Pak můžete pybor volat odkudkoliv příkazem `pybor`.
-            * **MacOS:** Stáhněte Mac verzi a spusťte v terminálu.
+          files: "*.zip"
           draft: false
           prerelease: true

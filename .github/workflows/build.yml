@@ -1,0 +1,56 @@
+name: 2. Build Pybor Studia (Všechny platformy)
+
+on:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-desktop:
+    name: Build pro počítače (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+          - os: ubuntu-latest
+          - os: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalace Rustu
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Instalace GUI závislostí (Pouze Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libasound2-dev
+
+      - name: Zkompilovat Studio
+        run: cargo build --release
+
+  build-mobile:
+    name: Build pro Mobily (Android APK & iOS)
+    runs-on: macos-latest # Potřebujeme Mac pro kontrolu iOS
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Instalace Rustu (s podporou pro mobily)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, aarch64-apple-ios
+
+      - name: Instalace Android nástrojů (cargo-apk)
+        run: cargo install cargo-apk
+
+      - name: Setup Java (pro Android SDK)
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Vytvoření Android .APK
+        run: cargo apk build --release
+        
+      - name: Kontrola kompilace pro iOS
+        # Vytvořit finální iOS .ipa aplikaci vyžaduje placený Apple Developer Účet ($99/rok)
+        # Zde alespoň zkontrolujeme, že je kód s iOS kompatibilní a jde pro něj zkompilovat!
+        run: cargo check --target aarch64-apple-ios
