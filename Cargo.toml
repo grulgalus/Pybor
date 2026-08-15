@@ -3,9 +3,13 @@ name = "pybor"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "pybor"
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 object = { version = "0.36", features = ["write"] }
-eframe = "0.24"
+eframe = { version = "0.24", default-features = false, features = ["default_fonts", "glow"] }
 rfd = "0.12"
 fatfs = "0.3"
 fscommon = "0.1"
