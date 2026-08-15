@@ -34,7 +34,6 @@ impl Default for PyborApp {
     }
 }
 
-// Funkce na okamžitý překlad textů v UI
 fn t(lang: Language, en: &str, cz: &str) -> String {
     match lang {
         Language::English => en.to_string(),
@@ -59,27 +58,18 @@ impl eframe::App for PyborApp {
                 egui::ComboBox::from_id_source("arch_combo")
                     .selected_text(format!("{:?}", self.selected_target))
                     .show_ui(ui, |ui| {
-                        ui.label("--- Intel / AMD ---");
                         ui.selectable_value(&mut self.selected_target, Target::X86_16, "x86 (16-bit Raw .bin)");
                         ui.selectable_value(&mut self.selected_target, Target::X86_32, "x86 (32-bit ELF)");
                         ui.selectable_value(&mut self.selected_target, Target::X86_64, "x86 (64-bit UEFI .img)");
-                        ui.separator();
-                        ui.label("--- ARM ---");
                         ui.selectable_value(&mut self.selected_target, Target::Arm32, "ARM (32-bit ELF)");
                         ui.selectable_value(&mut self.selected_target, Target::Arm64, "ARM (64-bit ELF)");
-                        ui.separator();
-                        ui.label("--- RISC-V ---");
                         ui.selectable_value(&mut self.selected_target, Target::Riscv32, "RISC-V (32-bit ELF)");
                         ui.selectable_value(&mut self.selected_target, Target::Riscv64, "RISC-V (64-bit ELF)");
-                        ui.separator();
-                        ui.label("--- Exotic / Ostatní ---");
                         ui.selectable_value(&mut self.selected_target, Target::Mips, "MIPS (32-bit ELF)");
                         ui.selectable_value(&mut self.selected_target, Target::Mips64, "MIPS (64-bit ELF)");
                         ui.selectable_value(&mut self.selected_target, Target::PowerPc, "PowerPC (32-bit ELF)");
                         ui.selectable_value(&mut self.selected_target, Target::PowerPc64, "PowerPC (64-bit ELF)");
                         ui.selectable_value(&mut self.selected_target, Target::Sparc64, "SPARC (64-bit ELF)");
-                        ui.separator();
-                        ui.label("--- Web ---");
                         ui.selectable_value(&mut self.selected_target, Target::Wasm32, "WebAssembly (32-bit WASM)");
                     });
             });
@@ -129,9 +119,6 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native("Pybor Studio", options, Box::new(|_cc| Box::new(PyborApp::default())))
 }
 
-// ---------------------------------------------------------
-// PYBOR JÁDRO (CORE)
-// ---------------------------------------------------------
 fn parse_program_string(src: &str) -> Result<Vec<Stmt>, String> {
     let mut body = Vec::new();
     let mut header_seen = false;
@@ -199,13 +186,20 @@ fn gen_dummy(_stmts: &[Stmt]) -> Vec<u8> { vec![0x00, 0x00, 0x00, 0x00] }
 
 fn create_bootable_img(efi_binary: &[u8], output_file: &str) -> Result<(), String> {
     let mut img_data = vec![0u8; 10 * 1024 * 1024]; 
-    let mut cursor = std::io::Cursor::new(&mut img_data);
-    fatfs::format_volume(&mut cursor, FormatVolumeOptions::new()).map_err(|e| e.to_string())?;
     
-    let fs = FileSystem::new(cursor, fatfs::FsOptions::new()).map_err(|e| e.to_string())?;
-    fs.root_dir().create_dir("EFI").unwrap();
-    fs.root_dir().create_dir("EFI/BOOT").unwrap().create_file("BOOTX64.EFI").unwrap().write_all(efi_binary).unwrap();
+    // TADY JE OPRAVA PRO BORROW CHECKER!
+    // Vytvoříme blok, ve kterém FatFS zapisuje do paměti. 
+    // Na konci bloku kurzor i systém FatFS zmizí, takže paměť je opět naše!
+    {
+        let mut cursor = std::io::Cursor::new(&mut img_data);
+        fatfs::format_volume(&mut cursor, FormatVolumeOptions::new()).map_err(|e| e.to_string())?;
+        
+        let fs = FileSystem::new(cursor, fatfs::FsOptions::new()).map_err(|e| e.to_string())?;
+        fs.root_dir().create_dir("EFI").unwrap();
+        fs.root_dir().create_dir("EFI/BOOT").unwrap().create_file("BOOTX64.EFI").unwrap().write_all(efi_binary).unwrap();
+    } // Zde kurzor a fs umírají
     
+    // Nyní můžeme bezpečně vzít data a uložit je na disk.
     fs::write(output_file, img_data).map_err(|e| e.to_string())?;
     Ok(())
 }
