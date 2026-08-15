@@ -48,7 +48,8 @@ jobs:
         run: cargo install cargo-apk
 
       - name: Build Android APK
-        run: cargo apk build --release || echo "Warning: NDK might require manual path setup on GitHub runners, skipping hard fail."
+        run: |
+          cargo apk build --release || echo "Warning: NDK might require manual path setup on GitHub runners, skipping hard fail."
         
       - name: Check iOS Compatibility
         run: cargo check --target aarch64-apple-ios
