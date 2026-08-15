@@ -10,6 +10,9 @@ rfd = "0.12"
 fatfs = "0.3"
 fscommon = "0.1"
 
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winuser", "windef"] }
+
 [package.metadata.android]
 apk_name = "PyborStudio"
 assets = "assets"

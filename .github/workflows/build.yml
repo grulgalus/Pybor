@@ -44,10 +44,9 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # Záchrana pro Android: instalace chybějící Platform 30
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
+      - name: Force Install Android Platform 30
+        run: echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-30" "build-tools;30.0.3"
+          
       - name: Install cargo-apk
         run: cargo install cargo-apk
 
