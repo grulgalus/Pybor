@@ -1,21 +1,10 @@
 [package]
 name = "pybor"
-version = "0.2.0"
+version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-object = { version = "0.32", features = ["write"] }
-
-[profile.release]
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true
-fatfs = "0.3"
-fscommon = "0.1"
-eframe = "0.24"
-rfd = "0.12"
-iso9660 = "0.1" # (Teoretická podpora pro čtení/zápis dat na CD)
+object = "0.36"
 eframe = "0.24"
 rfd = "0.12"
 fatfs = "0.3"
